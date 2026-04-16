@@ -9,7 +9,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
-	"net/url"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -130,14 +130,14 @@ func retryable(err error, res *http.Response) bool {
 		return errors.As(err, &netErr)
 	}
 
-	if res.StatusCode == 429 || res.StatusCode >= 500 {
+	if res != nil && (res.StatusCode == 429 || res.StatusCode >= 500) {
 		return true
 	}
 
 	return false
 }
 
-func fetchWithRetry(client *http.Client, req *http.Request) (*http.Response, error) {
+func fetchWithRetry(client *http.Client, url string) (*http.Response, error) {
 	var res *http.Response
 	var err error
 
@@ -149,11 +149,20 @@ func fetchWithRetry(client *http.Client, req *http.Request) (*http.Response, err
 			log("Retry attempt %d of %d", attempt, retries)
 		}
 
-		start := time.Now()
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			die(1, "failed to create request: %v", err)
+		}
+
+		req.Header.Set("User-Agent", "waymachine/1.0")
+
 		res, err := client.Do(req)
-		log("attempt took %s", time.Since(start))
 		if !retryable(err, res) {
 			return res, err
+		}
+
+		if res != nil && res.Body != nil {
+			res.Body.Close()
 		}
 
 		sleep := backoff + time.Duration(rand.Int63n(int64(2*time.Second)))
@@ -291,7 +300,7 @@ func main() {
 		writer = f
 	}
 
-	params := url.Values{}
+	params := neturl.Values{}
 	params.Set("url", strings.TrimRight(target, "/")+"/")
 	params.Set("matchType", match)
 	params.Set("limit", fmt.Sprintf("%d", limit))
@@ -314,14 +323,9 @@ func main() {
 		Timeout: time.Duration(timeout) * time.Second,
 	}
 
-	req, err := http.NewRequest("GET", "https://web.archive.org/cdx/search/cdx?"+params.Encode(), nil)
-	if err != nil {
-		die(1, "failed to create request: %v", err)
-	}
+	url := "https://web.archive.org/cdx/search/cdx?" + params.Encode()
 
-	req.Header.Set("User-Agent", "waymachine/1.0")
-
-	res, err := fetchWithRetry(client, req)
+	res, err := fetchWithRetry(client, url)
 	if err != nil {
 		die(1, "request failed: %v", err)
 	}
@@ -351,7 +355,7 @@ func main() {
 			die(1, "failed to decode row: %v", err)
 		}
 
-		obj := make(map[string]string)
+		obj := make(map[string]string, len(keyList))
 
 		for i, v := range row {
 			if i < len(keyList) {
