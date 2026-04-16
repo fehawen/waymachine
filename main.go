@@ -151,7 +151,7 @@ func fetchWithRetry(client *http.Client, url string) (*http.Response, error) {
 
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
-			die(1, "failed to create request: %v", err)
+			return nil, err
 		}
 
 		req.Header.Set("User-Agent", "waymachine/1.0")
