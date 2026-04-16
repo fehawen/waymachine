@@ -2,14 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
-	"math/rand"
-	"net"
 	"net/http"
-	neturl "net/url"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -46,7 +43,7 @@ Description:
   Targets may be a domain, host, or URL-like string.
 
   Requests that fail with HTTP 429 or 5xx are retried up to 3 times
-  using exponential backoff with jitter.
+  with exponential backoff.
 
 Output:
   Results are written as JSON Lines (JSONL) to stdout by default.
@@ -126,8 +123,7 @@ func die(code int, format string, args ...any) {
 
 func retryable(err error, res *http.Response) bool {
 	if err != nil {
-		var netErr net.Error
-		return errors.As(err, &netErr)
+		return true
 	}
 
 	if res != nil && (res.StatusCode == 429 || res.StatusCode >= 500) {
@@ -137,7 +133,7 @@ func retryable(err error, res *http.Response) bool {
 	return false
 }
 
-func fetchWithRetry(client *http.Client, url string) (*http.Response, error) {
+func fetchWithRetry(client *http.Client, endpoint string) (*http.Response, error) {
 	var res *http.Response
 	var err error
 
@@ -149,7 +145,7 @@ func fetchWithRetry(client *http.Client, url string) (*http.Response, error) {
 			log("Retry attempt %d of %d", attempt, retries)
 		}
 
-		req, err := http.NewRequest("GET", url, nil)
+		req, err := http.NewRequest("GET", endpoint, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -158,15 +154,17 @@ func fetchWithRetry(client *http.Client, url string) (*http.Response, error) {
 
 		res, err := client.Do(req)
 		if !retryable(err, res) {
+			if err != nil && res != nil {
+				res.Body.Close()
+			}
 			return res, err
 		}
 
-		if res != nil && res.Body != nil {
+		if res != nil {
 			res.Body.Close()
 		}
 
-		sleep := backoff + time.Duration(rand.Int63n(int64(2*time.Second)))
-		time.Sleep(sleep)
+		time.Sleep(backoff)
 		backoff *= 2
 	}
 
@@ -300,10 +298,10 @@ func main() {
 		writer = f
 	}
 
-	params := neturl.Values{}
+	params := url.Values{}
 	params.Set("url", strings.TrimRight(target, "/")+"/")
 	params.Set("matchType", match)
-	params.Set("limit", fmt.Sprintf("%d", limit))
+	params.Set("limit", strconv.FormatUint(uint64(limit), 10))
 	params.Set("fl", fields)
 	params.Set("output", "json")
 
@@ -323,9 +321,9 @@ func main() {
 		Timeout: time.Duration(timeout) * time.Second,
 	}
 
-	url := "https://web.archive.org/cdx/search/cdx?" + params.Encode()
+	endpoint := "https://web.archive.org/cdx/search/cdx?" + params.Encode()
 
-	res, err := fetchWithRetry(client, url)
+	res, err := fetchWithRetry(client, endpoint)
 	if err != nil {
 		die(1, "request failed: %v", err)
 	}
