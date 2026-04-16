@@ -1,0 +1,9 @@
+waymachine
+----------
+
+Yet another Go tool for querying the Wayback CDX Server API.  Supports most, but
+not all, of the query params accepted by the API.  Prints JSONL to stdout or
+local file.  Does not accept line-delimited stdin.
+
+This tool is opiniated.  You probably don't want to use it -- there are better
+alternatives out there for this purpose.
