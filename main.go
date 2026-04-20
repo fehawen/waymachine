@@ -340,6 +340,11 @@ func main() {
 		die(1, "invalid JSON response")
 	}
 
+	if !dec.More() {
+		log("no results")
+		return
+	}
+
 	var discard []string
 	if err := dec.Decode(&discard); err != nil {
 		die(1, "failed to decode header: %v", err)
