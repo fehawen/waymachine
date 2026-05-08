@@ -104,7 +104,7 @@ func usage() {
 }
 
 func log(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "waymachine: "+format+"\n", args...)
+	fmt.Fprintf(os.Stderr, "[waymachine] "+format+"\n", args...)
 }
 
 func hint() {
@@ -181,13 +181,7 @@ func strToSlice(s string) []string {
 }
 
 func main() {
-	if len(os.Args) == 1 {
-		hint()
-		os.Exit(2)
-	}
-
 	var (
-		help     bool
 		target   string
 		match    string
 		fields   string
@@ -199,21 +193,16 @@ func main() {
 		collapse []string
 	)
 
-	fs := flag.NewFlagSet("waymachine", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
+	flag.StringVar(&target, "t", "", "")
+	flag.StringVar(&match, "m", "domain", "")
+	flag.StringVar(&fields, "f", "original", "")
+	flag.StringVar(&keys, "k", "", "")
+	flag.StringVar(&output, "o", "", "")
 
-	fs.BoolVar(&help, "h", false, "")
-	fs.BoolVar(&help, "help", false, "")
-	fs.StringVar(&target, "t", "", "")
-	fs.StringVar(&match, "m", "domain", "")
-	fs.StringVar(&fields, "f", "original", "")
-	fs.StringVar(&keys, "k", "", "")
-	fs.StringVar(&output, "o", "", "")
+	flag.UintVar(&limit, "l", 1000, "")
+	flag.UintVar(&timeout, "x", 60, "")
 
-	fs.UintVar(&limit, "l", 1000, "")
-	fs.UintVar(&timeout, "x", 60, "")
-
-	fs.Func("r", "", func(s string) error {
+	flag.Func("r", "", func(s string) error {
 		parts := strings.SplitN(s, ":", 2)
 		if len(parts) != 2 {
 			return fmt.Errorf("%q filter must be followed by a regex", s)
@@ -229,7 +218,7 @@ func main() {
 		return nil
 	})
 
-	fs.Func("c", "", func(s string) error {
+	flag.Func("c", "", func(s string) error {
 		parts := strings.SplitN(s, ":", 2)
 
 		if !slices.Contains(fieldOptions, parts[0]) {
@@ -247,14 +236,9 @@ func main() {
 		return nil
 	})
 
-	err := fs.Parse(os.Args[1:])
-	if err != nil {
-		die(2, "%v", err)
-	}
+	flag.Usage = usage
 
-	if help {
-		usage()
-	}
+	flag.Parse()
 
 	if target == "" {
 		die(2, "no target provided")
