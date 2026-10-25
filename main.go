@@ -153,14 +153,13 @@ func fetchWithRetry(client *http.Client, endpoint string) (*http.Response, error
 
 		res, err := client.Do(req)
 		if !retryable(err, res) {
-			if err != nil && res != nil {
-				res.Body.Close()
-			}
 			return res, err
 		}
 
 		if res != nil {
-			res.Body.Close()
+			if closeErr := res.Body.Close(); closeErr != nil {
+				log("failed to close response body before retry: %v", closeErr)
+			}
 		}
 
 		time.Sleep(backoff)
@@ -275,7 +274,11 @@ func main() {
 			die(1, "failed to create output file: %v", err)
 		}
 
-		defer f.Close()
+		defer func() {
+			if err := f.Close(); err != nil {
+				log("failed to close output file: %v", err)
+			}
+		}()
 
 		writer = f
 	}
@@ -309,7 +312,12 @@ func main() {
 	if err != nil {
 		die(1, "request failed: %v", err)
 	}
-	defer res.Body.Close()
+
+	defer func() {
+		if err := res.Body.Close(); err != nil {
+			log("failed to close response body: %v", err)
+		}
+	}()
 
 	if res.StatusCode != 200 {
 		die(1, "request failed after retries: %s", res.Status)
